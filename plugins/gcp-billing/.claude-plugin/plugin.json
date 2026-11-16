@@ -1,0 +1,10 @@
+{
+  "name": "gcp-billing",
+  "version": "0.1.0",
+  "description": "GCP 虚拟机计费面板：运行时长、单价、估算费用，超 1 小时提醒",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "CXP-2024"
+  },
+  "license": "MIT"
+}

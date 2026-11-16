@@ -1,0 +1,8 @@
+{
+  "name": "claude-code-mods",
+  "owner": { "name": "CXP-2024" },
+  "plugins": [
+    { "name": "gcp-billing", "source": "./plugins/gcp-billing", "description": "GCP 虚拟机计费面板：运行时长、单价、估算费用，超 1 小时提醒（Windows）" },
+    { "name": "ink-paper-theme", "source": "./plugins/ink-paper-theme", "description": "月白·青黛主题：灰调月白纸底、青黛强调、淡七宝纹背景" }
+  ]
+}
