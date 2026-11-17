@@ -550,8 +550,26 @@ export const register: Register = on => {
       return `${d.getMonth() + 1}-${d.getDate()}`
     }
 
-    // 左右两栏：左 GCP（余额推算 / 虚拟机 / 存储），右 Colab；底部一行刷新状态。
-    // 每块只留一个大数字，其余压成一两行小字，整块尽量不用滚动。
+    // 自适应排版：先估算单栏（GCP 在上、Colab 在下）要占多少行，面板放得下就用单栏，
+    // 放不下才切成左右两栏，免得滚动。估算按面板的列数折行。
+    // 桌面端实测（2026-11-17）：一行约 24 px、一列约 14 px，常见停靠宽度 33 列、高 54 行；
+    // 小字比一行矮，估算偏多，只会在确实放不下时才切两栏。
+    const cols = Math.max(20, e.props.bodyColumns)
+    const roomRows = e.props.scroll.bodyRows
+    const lines = (...texts: string[]) => texts.reduce((n, t) => n + Math.max(1, Math.ceil(t.length * 1.6 / cols)), 0)
+    const singleRows =
+      // 余额推算：标题 + 大数字(2 行高) + 2 行小字
+      5 +
+      // 虚拟机：标题 + 一行 + 每台 2 行 + 已停止一行
+      2 + running.length * 3 + (others.length > 0 ? 2 : 0) +
+      // 存储：标题 + 合计 + 每项一行（长名字会折行）
+      2 + (storage?.items ?? []).reduce((n, i) => n + lines(`${KIND_LABEL[i.kind]} ${i.name} · 00 GiB · $0.00`), 0) +
+      // Colab：标题 + 大数字 + 约值 + 状态（计费时多两行）
+      5 + (colabActive ? 2 : 0) +
+      // 刷新行 + 区块之间的空隙
+      2 + 8
+    const isSplit = roomRows > 0 && roomRows < singleRows
+
     const section = (title: string) => (
       <Text size="caption" weight="medium" dimColor>
         {title}
@@ -559,7 +577,7 @@ export const register: Register = on => {
     )
 
     const gcpColumn = (
-      <Box flexDirection="column" gap={2} width="58%" flexShrink={1}>
+      <Box flexDirection="column" gap={2} width={isSplit ? '58%' : '100%'} flexShrink={1}>
         {/* 赠金余额 */}
         <Box flexDirection="column">
           {section('GCP 赠金余额 · 推算')}
@@ -665,7 +683,7 @@ export const register: Register = on => {
     )
 
     const colabColumn = (
-      <Box flexDirection="column" gap={2} width="42%" flexShrink={1}>
+      <Box flexDirection="column" gap={2} width={isSplit ? '42%' : '100%'} flexShrink={1}>
         <Box flexDirection="column">
           {section('Colab Pro+')}
           {colab === null ? (
@@ -710,7 +728,12 @@ export const register: Register = on => {
 
     return (
       <Box flexDirection="column" gap={2}>
-        <Box flexDirection="row" columnGap={3} alignItems="flex-start">
+        <Box
+          flexDirection={isSplit ? 'row' : 'column'}
+          columnGap={3}
+          rowGap={2}
+          alignItems="flex-start"
+        >
           {gcpColumn}
           {colabColumn}
         </Box>

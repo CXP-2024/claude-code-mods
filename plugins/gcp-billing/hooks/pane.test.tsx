@@ -76,3 +76,27 @@ test('both columns draw, with a running VM and a billed Colab runtime', async ($
     await ui.unmount()
   }
 })
+
+test('a short pane splits into two columns, a tall one stays single', async ($, on) => {
+  on('state.get', (_, e) => {
+    const key = (e as { key: string }).key
+    return { value: { value: SEED[key], version: 1 } }
+  })
+
+  const directions = async (bodyRows: number) => {
+    const ui = await $.ui.mount({
+      ...PANE,
+      surface: 'desktop',
+      props: { ...PANE.props, bodyColumns: 33, scroll: { offset: 0, bodyRows } },
+    })
+    const boxes = await ui.findAll({ type: 'Box' })
+    const dirs = boxes.map(b => b.props.flexDirection)
+    await ui.unmount()
+    return dirs
+  }
+
+  // The refresh line is always a row; the columns add a second one only when split.
+  const rows = (dirs: unknown[]) => dirs.filter(d => d === 'row').length
+  expect(rows(await directions(20))).toBe(2)
+  expect(rows(await directions(200))).toBe(1)
+})

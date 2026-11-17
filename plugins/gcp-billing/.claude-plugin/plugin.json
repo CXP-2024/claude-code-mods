@@ -1,6 +1,6 @@
 {
   "name": "gcp-billing",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "GCP 虚拟机与 Colab Pro+ 计费面板：赠金余额推算、运行时长与费用、镜像等存储费、Colab 计算单元余额（Windows）",
   "types": "./types/index.d.ts",
   "author": {
