@@ -40,7 +40,7 @@ const SEED: Record<string, unknown> = {
     },
   },
   credit: {
-    shape: 'credit-1',
+    shape: 'credit-2',
     value: {
       baselineUsd: 166.66,
       baselineAt: NOW - 86_400_000,
@@ -49,6 +49,7 @@ const SEED: Record<string, unknown> = {
       storageUsd: 0.2,
       last7dUsd: 12.25,
       vmHours: 1.5,
+      factor: 1.04,
       checkedAt: NOW,
       error: null,
     },

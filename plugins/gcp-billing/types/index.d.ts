@@ -31,6 +31,7 @@ export type Credit = {
   storageUsd: number
   last7dUsd: number
   vmHours: number
+  factor: number
   checkedAt: number
   error: string | null
 }

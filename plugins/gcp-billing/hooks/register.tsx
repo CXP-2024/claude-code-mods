@@ -208,7 +208,7 @@ async function tickStorage($: EngineInterface): Promise<void> {
 // 之后从审计日志还原每台虚拟机的开机区间（开机 / 关机 / 删除 / Spot 抢占），
 // 按单价算机器费和启动盘费，再加镜像等存储费，从基准里扣。不含下行流量和税。
 // 审计日志默认只保留 30 天，所以基准最好每两三周按控制台校准一次。
-const creditAtom = atom({ plugin: 'gcp-billing', key: 'credit' } as const, null, { shape: 'credit-1' })
+const creditAtom = atom({ plugin: 'gcp-billing', key: 'credit' } as const, null, { shape: 'credit-2' })
 const BASELINE_KEY = 'credit-baseline'
 const HOUR = 3_600_000
 const DAY = 24 * HOUR
@@ -216,7 +216,7 @@ const DAY = 24 * HOUR
 const defaultDiskUsdPerHour = (machine: string) =>
   machine.startsWith('g4-') ? (200 * 0.08) / 730 : (50 * 0.1) / 730
 
-type Baseline = { usd: number; at: number }
+type Baseline = { usd: number; at: number; factor?: number }
 
 // 基准存在用户目录下的一个文件里，而不是 $.store：$.store 按插件来源分开存，
 // 开发版和正式安装版、不同会话之间会读不到彼此设的基准。
@@ -379,30 +379,42 @@ function spendBetween(vms: Map<string, VmLife>, storage: Storage | null, from: n
   return { vmUsd, diskUsd, storageUsd, vmHours }
 }
 
+// 从 from 到现在、以及近 7 天的推算花费（未乘校准系数）。
+async function estimateSince($: EngineInterface, from: number) {
+  const now = await $.clock.now()
+  const from7 = now - 7 * DAY
+  const days = Math.min(30, Math.ceil((now - Math.min(from, from7)) / DAY) + 1)
+  const [entries, snap, storage] = await Promise.all([readAudit($, days), read($, snapshot), read($, storageAtom)])
+  const vms = reconstruct(entries, snap, now)
+  return { now, since: spendBetween(vms, storage, from, now), week: spendBetween(vms, storage, from7, now) }
+}
+
+const totalOf = (s: { vmUsd: number; diskUsd: number; storageUsd: number }) => s.vmUsd + s.diskUsd + s.storageUsd
+
+// 日志算不到流量、hyperdisk 的 IOPS/吞吐费和 Spot 当天的浮动价。每次按控制台重设基准时，
+// 用“控制台实际花掉 ÷ 推算花掉”得到校准系数，之后的推算乘上它，把这些按比例补进来。
+// 推算太少（不到 $0.5）时样本不够，沿用旧系数；系数限制在 0.7–1.6，防止一次填错带偏。
+const FACTOR_MIN = 0.7
+const FACTOR_MAX = 1.6
+
 async function tickCredit($: EngineInterface): Promise<void> {
   const base = await readBaseline($)
   if (base === null) {
     await update($, creditAtom, () => null)
     return
   }
-  const now = await $.clock.now()
-  const from7 = now - 7 * DAY
-  const since = Math.min(base.at, from7)
-  const days = Math.min(30, Math.ceil((now - since) / DAY) + 1)
+  const factor = base.factor ?? 1
   try {
-    const [entries, snap, storage] = await Promise.all([
-      readAudit($, days),
-      read($, snapshot),
-      read($, storageAtom),
-    ])
-    const vms = reconstruct(entries, snap, now)
-    const s = spendBetween(vms, storage, base.at, now)
-    const w = spendBetween(vms, storage, from7, now)
+    const { now, since: s, week: w } = await estimateSince($, base.at)
     const credit: Credit = {
       baselineUsd: base.usd,
       baselineAt: base.at,
-      ...s,
-      last7dUsd: w.vmUsd + w.diskUsd + w.storageUsd,
+      vmUsd: s.vmUsd * factor,
+      diskUsd: s.diskUsd * factor,
+      storageUsd: s.storageUsd * factor,
+      vmHours: s.vmHours,
+      factor,
+      last7dUsd: totalOf(w) * factor,
       checkedAt: now,
       error: now - base.at > 30 * DAY ? '基准已超过 30 天，日志不全，请按控制台重设一次' : null,
     }
@@ -502,10 +514,28 @@ export const register: Register = on => {
           : '用法：/gcp-credit 166.66（填控制台 Billing > Credits 里所有可用赠金的剩余金额之和）',
       }
     }
-    await writeBaseline($, { usd, at: await $.clock.now() })
+    const old = await readBaseline($)
+    let factor = old?.factor ?? 1
+    let note = ''
+    if (old !== null) {
+      try {
+        const est = totalOf((await estimateSince($, old.at)).since)
+        const actual = old.usd - usd
+        if (est >= 0.5 && actual > 0) {
+          const raw = actual / est
+          factor = Math.min(FACTOR_MAX, Math.max(FACTOR_MIN, raw))
+          note = `上次基准以来推算 $${est.toFixed(2)}、实际 $${actual.toFixed(2)}，校准系数 ×${factor.toFixed(3)}。`
+        } else {
+          note = `上次基准以来花费太少（推算 $${est.toFixed(2)}），沿用校准系数 ×${factor.toFixed(3)}。`
+        }
+      } catch (err) {
+        note = `没能读日志校准（${String(err instanceof Error ? err.message : err).slice(0, 80)}），沿用系数 ×${factor.toFixed(3)}。`
+      }
+    }
+    await writeBaseline($, { usd, at: await $.clock.now(), factor })
     await $.ui.open({ id: PANE, title: 'GCP · Colab 计费' })
     await tickCredit($)
-    return { text: `已设定赠金基准 $${usd.toFixed(2)}，之后面板会按审计日志自动往下扣。` }
+    return { text: `已设定赠金基准 $${usd.toFixed(2)}。${note}` }
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
@@ -540,7 +570,7 @@ export const register: Register = on => {
     const storageGib = (storage?.items ?? []).reduce((s, i) => s + i.gib, 0)
     const credit = await read($, creditAtom)
     // 推算结果每 10 分钟更新；其间把正在跑的机器按秒加上去，数字随时间走。
-    const liveExtra = credit === null ? 0 : perHour * Math.max(0, now - credit.checkedAt) / HOUR
+    const liveExtra = credit === null ? 0 : (perHour * Math.max(0, now - credit.checkedAt) / HOUR) * credit.factor
     const creditSpent = credit === null ? 0 : credit.vmUsd + credit.diskUsd + credit.storageUsd + liveExtra
     const creditLeft = credit === null ? 0 : credit.baselineUsd - creditSpent
     const perDay7 = credit === null ? 0 : credit.last7dUsd / 7
@@ -595,6 +625,7 @@ export const register: Register = on => {
               </Text>
               <Text size="footnote" dimColor tabular>
                 日均 {usd(perDay7)}（近 7 天）{daysLeft !== null ? ` · 约 ${daysLeft} 天用完` : ''}
+                {credit.factor !== 1 ? ` · 校准 ×${credit.factor.toFixed(2)}` : ''}
               </Text>
               {credit.error !== null && (
                 <Text size="footnote" color="warning">
