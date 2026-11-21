@@ -1,6 +1,6 @@
 # Claude Code mods
 
-两个 Claude Code 的 mod（基于 function hooks 的插件）。
+三个 Claude Code 的 mod（基于 function hooks 的插件）。
 
 ## gcp-billing — GCP 计费面板
 
@@ -24,6 +24,10 @@ Colab 部分另需：WSL 里装好官方 Colab CLI 并登录过一次，路径�
 
 桌面版和手机版的配色主题：灰调月白纸底、墨色文字、青黛强调色、低饱和砖红报错，背景铺一层极淡的七宝纹；夜间为冷调夜墨。终端不显示主题。
 
+## navy-night — 深夜蓝主题
+
+桌面版和手机版的配色主题：纯色深夜蓝背景（`#0b0f1a`），面板一层比一层略亮，冰蓝色强调色、琥珀色警告。没有背景图案和动画。终端不显示主题。主题只对已经启动的会话生效，新会话页面在发出第一条消息前是应用默认外观。
+
 ## 安装
 
 在终端里的 Claude Code 会话中：
@@ -31,6 +35,7 @@ Colab 部分另需：WSL 里装好官方 Colab CLI 并登录过一次，路径�
 ```
 /plugin install gcp-billing --marketplace CXP-2024/claude-code-mods
 /plugin install ink-paper-theme --marketplace CXP-2024/claude-code-mods
+/plugin install navy-night --marketplace CXP-2024/claude-code-mods
 ```
 
 第一次会问是否添加 marketplace，输入 `y`，再选安装范围（user 范围对之后所有会话生效）。
@@ -40,10 +45,11 @@ Colab 部分另需：WSL 里装好官方 Colab CLI 并登录过一次，路径�
 ```
 claude plugin install gcp-billing --marketplace CXP-2024/claude-code-mods
 claude plugin install ink-paper-theme --marketplace CXP-2024/claude-code-mods
+claude plugin install navy-night --marketplace CXP-2024/claude-code-mods
 ```
 
 在桌面版里（不支持 `/plugin`）：点输入框旁的 **+** → **Plugins** → **Add marketplace**，填 `CXP-2024/claude-code-mods`，然后 **Add plugin**。
 
 ## License
 
-MIT
+MIT。各主题里的 `hooks/make-colors.js`、`make-colors.d.ts` 是 Claude Code mod 工具包自带的配色辅助文件，按工具包的说明原样复制使用。
